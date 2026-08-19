@@ -13,7 +13,7 @@ export function buildPluginInfo(): InfoContract {
     describe:
       "JJ漫画源插件，支持搜索、漫画详情、章节阅读、图片获取和章节下载。",
     version: "0.0.1",
-    home: "https://github.com/deretame/jjmhw",
+    home: "https://github.com/deretame/Breeze-plugin-jjmhw",
     updateUrl:
       "https://api.github.com/repos/deretame/Breeze-plugin-jjmhw/releases/latest",
     npmName: "breeze-plugin-jjmhw",
