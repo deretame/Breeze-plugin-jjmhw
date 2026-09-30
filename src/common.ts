@@ -1,6 +1,7 @@
 import type {
   ActionItem,
   ComicListItem,
+  CreatorPageAction,
   ImageItem,
   MetadataListItem,
   PagingInfo,
@@ -57,7 +58,7 @@ export function parseChapterId(value: unknown): string {
   return readString(value).match(/(?:^|\/)chapter\/(\d+)/u)?.[1] ?? "";
 }
 
-export function createSearchAction(keyword = ""): ActionItem["onTap"] {
+export function createSearchAction(keyword = ""): CreatorPageAction {
   return {
     type: "openSearch",
     payload: {

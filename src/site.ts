@@ -20,6 +20,24 @@ export function buildBookUrl(bookId: string): string {
 export function buildChapterUrl(chapterId: string): string {
   return `${BASE_URL}/chapter/${encodeURIComponent(chapterId)}`;
 }
+export function buildRankUrl(): string {
+  return `${BASE_URL}/rank`;
+}
+
+export function buildBooklistUrl(
+  tag: string,
+  area: string,
+  end: string,
+  page = 1,
+): string {
+  const params = new URLSearchParams({
+    tag: tag || "全部",
+    area: area || "-1",
+    end: end || "-1",
+  });
+  if (page > 1) params.set("page", String(page));
+  return `${BASE_URL}/booklist?${params.toString()}`;
+}
 
 export async function fetchHtml(url: string, referer = `${BASE_URL}/`): Promise<string> {
   const response = await fetch(url, {

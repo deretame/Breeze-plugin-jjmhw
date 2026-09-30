@@ -167,6 +167,106 @@ export function parseSearchResult(
   };
 }
 
+export const BOOKLIST_TAGS = [
+  "全部",
+  "青春",
+  "性感",
+  "长腿",
+  "多人",
+  "御姐",
+  "巨乳",
+  "新婚",
+  "媳妇",
+  "暧昧",
+  "清纯",
+  "调教",
+  "少妇",
+  "风骚",
+  "同居",
+  "淫乱",
+  "好友",
+  "女神",
+  "诱惑",
+  "偷情",
+  "出轨",
+  "正妹",
+  "家教",
+] as const;
+
+export const BOOKLIST_AREAS = [
+  { label: "全部", value: "-1" },
+  { label: "台湾", value: "3" },
+  { label: "日本", value: "2" },
+  { label: "韩国", value: "1" },
+] as const;
+
+export const BOOKLIST_ENDS = [
+  { label: "全部", value: "-1" },
+  { label: "完结", value: "1" },
+  { label: "未完结", value: "0" },
+] as const;
+
+export const DEFAULT_BOOKLIST_TAG = "全部";
+export const DEFAULT_BOOKLIST_AREA = "-1";
+export const DEFAULT_BOOKLIST_END = "-1";
+
+export function normalizeBooklistTag(value: unknown): string {
+  const raw = readString(value);
+  if (raw && (BOOKLIST_TAGS as readonly string[]).includes(raw)) return raw;
+  return DEFAULT_BOOKLIST_TAG;
+}
+
+export function normalizeBooklistArea(value: unknown): string {
+  const raw = readString(value);
+  if (BOOKLIST_AREAS.some((option) => option.value === raw)) return raw;
+  return DEFAULT_BOOKLIST_AREA;
+}
+
+export function normalizeBooklistEnd(value: unknown): string {
+  const raw = readString(value);
+  if (BOOKLIST_ENDS.some((option) => option.value === raw)) return raw;
+  return DEFAULT_BOOKLIST_END;
+}
+
+export type ParsedBooklistPage = {
+  tag: string;
+  area: string;
+  end: string;
+  page: number;
+  pages: number;
+  hasReachedMax: boolean;
+  items: ComicListItem[];
+};
+
+export function parseBooklistPage(
+  html: string,
+  tagValue: unknown,
+  areaValue: unknown,
+  endValue: unknown,
+  page: number,
+  sourceUrl = BASE_URL,
+): ParsedBooklistPage {
+  const tag = normalizeBooklistTag(tagValue);
+  const area = normalizeBooklistArea(areaValue);
+  const end = normalizeBooklistEnd(endValue);
+  const root = loadHtml(html);
+  const list = root("ul.mh-list").first();
+  const scope = list.length > 0 ? list : root("body");
+  const items = parseComicItems(root, scope, sourceUrl);
+  const pageNumbers: number[] = [];
+  root(".pagination a").each((_index: number, element: BreezeSelection) => {
+    const link = root(element);
+    const label = readNumber(text(link));
+    if (label > 0) pageNumbers.push(label);
+    const href = attr(link, "href");
+    if (!href) return;
+    const pageParam = href.match(/[?&]page=(\d+)/u)?.[1];
+    if (pageParam) pageNumbers.push(readNumber(pageParam));
+  });
+  const pages = pageNumbers.length > 0 ? Math.max(...pageNumbers) : 1;
+  return { tag, area, end, page, pages, hasReachedMax: page >= pages, items };
+}
+
 function parseLabeledFields(scope: BreezeSelection): Record<string, string> {
   const fields: Record<string, string> = {};
   scope.find("span.block").each(
@@ -501,4 +601,160 @@ export function createChapterPages(
       },
     };
   });
+}
+
+export type RankType = "new" | "hot" | "completed" | "recommended";
+
+export const RANK_TITLES: Record<RankType, string> = {
+  new: "新书榜",
+  hot: "人气榜",
+  completed: "完结榜",
+  recommended: "推荐榜",
+};
+
+const RANK_ORDER: RankType[] = ["new", "hot", "completed", "recommended"];
+
+export function normalizeRankType(value: unknown): RankType {
+  const raw = readString(value);
+  if (/新书|新番/iu.test(raw) || raw === "new") return "new";
+  if (/完结/iu.test(raw) || raw === "completed") return "completed";
+  if (/推荐/iu.test(raw) || raw === "recommended") return "recommended";
+  return "hot";
+}
+
+function readAuthorLabel(value: string): string {
+  return value.replace(/^作者\s*[:：]?\s*/u, "").trim();
+}
+
+function collectTagLabels(root: BreezeApi, scope: BreezeSelection): string[] {
+  const values: string[] = [];
+  scope.find(".mh-label a").each((_index: number, element: BreezeSelection) => {
+    const value = text(root(element));
+    if (value) values.push(value);
+  });
+  return uniqueStrings(values);
+}
+
+function parseRankHeadItem(
+  root: BreezeApi,
+  item: BreezeSelection,
+  rankType: RankType,
+  baseUrl: string,
+): ComicListItem | null {
+  const anchor = item.find("h2.title a").first();
+  const id = parseBookId(attr(anchor, "href"));
+  const title = attr(anchor, "title") || text(anchor);
+  if (!id || !title) return null;
+  const coverUrl = normalizeUrl(
+    parseStyleUrl(attr(item.find(".mh-cover").first(), "style")),
+    baseUrl,
+  );
+  const author = readAuthorLabel(firstText(item, "p.zl"));
+  const subtitle = firstText(item, "p.chapter") || firstText(item, "div.desc");
+  const tags = collectTagLabels(root, item);
+  return createComicItem({
+    id,
+    title,
+    subtitle,
+    coverUrl,
+    author,
+    raw: {
+      id,
+      rank: 1,
+      rankType,
+      tags: tags.join(","),
+      href: normalizeUrl(attr(anchor, "href"), baseUrl),
+      title,
+      subtitle,
+      author,
+      coverUrl,
+    },
+    extern: { bookId: id, rankType, rank: "1", remoteUrl: coverUrl },
+  });
+}
+
+function parseRankRestItems(
+  root: BreezeApi,
+  section: BreezeSelection,
+  rankType: RankType,
+  baseUrl: string,
+): ComicListItem[] {
+  const result: ComicListItem[] = [];
+  section.find("div.mh-itme-top").each((_index: number, element: BreezeSelection) => {
+    const entry = root(element);
+    const anchor = entry.find('a[href*="/book/"]').first();
+    const id = parseBookId(attr(anchor, "href"));
+    const title = attr(anchor, "title") || text(anchor).replace(/^\d+\s*/u, "");
+    if (!id || !title) return;
+    const tip = entry.find(".mh-tip-wrap").first();
+    const scope = tip.length > 0 ? tip : entry;
+    const coverUrl = normalizeUrl(
+      parseStyleUrl(attr(scope.find(".mh-cover").first(), "style")),
+      baseUrl,
+    );
+    const author = readAuthorLabel(firstText(scope, ".author"));
+    const subtitle = firstText(scope, "p.chapter") || firstText(scope, "div.desc");
+    const rank = result.length + 2;
+    const item = createComicItem({
+      id,
+      title,
+      subtitle,
+      coverUrl,
+      author,
+      raw: {
+        id,
+        rank,
+        rankType,
+        href: normalizeUrl(attr(anchor, "href"), baseUrl),
+        title,
+        subtitle,
+        author,
+        coverUrl,
+      },
+      extern: { bookId: id, rankType, rank: String(rank), remoteUrl: coverUrl },
+    });
+    if (item) result.push(item);
+  });
+  return result;
+}
+
+export type ParsedRankPage = {
+  rankType: RankType;
+  title: string;
+  items: ComicListItem[];
+};
+
+export function parseRankPage(
+  html: string,
+  rankTypeValue: unknown,
+  sourceUrl = BASE_URL,
+): ParsedRankPage {
+  const rankType = normalizeRankType(rankTypeValue);
+  const wantTitle = RANK_TITLES[rankType];
+  const root = loadHtml(html);
+  const sections = root("ul.top-cat > li");
+  const sectionCount = sections.length;
+  let target: BreezeSelection | null = null;
+  let fallback: BreezeSelection | null = null;
+  for (let index = 0; index < sectionCount; index += 1) {
+    const candidate = sections.eq(index);
+    if (text(candidate.find("div.title").first()).includes(wantTitle)) {
+      target = candidate;
+      break;
+    }
+    if (index === RANK_ORDER.indexOf(rankType)) fallback = candidate;
+  }
+  const current = target ?? fallback;
+  if (current === null) return { rankType, title: wantTitle, items: [] };
+  const title = text(current.find("div.title").first()) || wantTitle;
+  const items: ComicListItem[] = [];
+  const head = current.find("div.mh-item.horizontal").first();
+  if (head.length > 0) {
+    const headItem = parseRankHeadItem(root, head, rankType, sourceUrl);
+    if (headItem) items.push(headItem);
+  }
+  for (const item of parseRankRestItems(root, current, rankType, sourceUrl)) {
+    items.push(item);
+  }
+  return { rankType, title, items };
 }

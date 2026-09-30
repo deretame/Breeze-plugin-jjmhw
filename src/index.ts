@@ -5,7 +5,10 @@ import type {
   ChapterSummary,
   ComicDetailContract,
   ComicDetailPayload,
+  ComicListSceneBundleContract,
+  ComicPagedListContract,
   FetchImageBytesPayload,
+  FilterBundleContract,
   InfoContract,
   ReadSnapshotContract,
   ReadSnapshotPayload,
@@ -25,15 +28,26 @@ import {
 } from "./common";
 import {
   buildBookUrl,
+  buildBooklistUrl,
   buildChapterUrl,
   buildImageHeaders,
+  buildRankUrl,
   buildSearchUrl,
   fetchHtml,
 } from "./site";
 import {
+  BOOKLIST_AREAS,
+  BOOKLIST_ENDS,
+  BOOKLIST_TAGS,
   createChapterPages,
+  normalizeBooklistArea,
+  normalizeBooklistEnd,
+  normalizeBooklistTag,
+  normalizeRankType,
+  parseBooklistPage,
   parseChapterPage,
   parseComicDetail,
+  parseRankPage,
   parseSearchResult,
   type ParsedChapterPage,
 } from "./parser";
@@ -248,6 +262,188 @@ async function getReadSnapshot(
   };
 }
 
+async function getComicListSceneBundle(): Promise<ComicListSceneBundleContract> {
+  return {
+    source: PLUGIN_ID,
+    scheme: {
+      version: "1.0.0" as const,
+      type: "comicListSceneBundle" as const,
+    },
+    data: {
+      scene: {
+        title: "排行榜",
+        source: PLUGIN_ID,
+        body: {
+          type: "pluginPagedComicList" as const,
+          request: {
+            fnPath: "getRankingData",
+            core: {},
+            extern: { source: "ranking" },
+          },
+        },
+        filter: {
+          fnPath: "getRankingFilterBundle",
+          extern: { source: "ranking" },
+        },
+      },
+    },
+  };
+}
+
+async function getRankingData(
+  payload: SearchComicPayload = {},
+): Promise<ComicPagedListContract> {
+  const flat = toStringMap(payload);
+  const extern = toStringMap(payload.extern);
+  const rankType = normalizeRankType(flat.rankType ?? extern.rankType ?? "hot");
+  const page = Math.max(1, Math.floor(Number(payload.page ?? 1) || 1));
+  if (page > 1) {
+    return {
+      source: PLUGIN_ID,
+      extern: { ...extern, rankType },
+      scheme: {
+        version: "1.0.0",
+        type: "searchResult",
+        source: PLUGIN_ID,
+        list: "comicGrid",
+      },
+      data: { items: [], hasReachedMax: true },
+    };
+  }
+  const url = buildRankUrl();
+  const html = await fetchHtml(url);
+  const parsed = parseRankPage(html, rankType, url);
+  return {
+    source: PLUGIN_ID,
+    extern: { ...extern, source: "ranking", rankType: parsed.rankType },
+    scheme: {
+      version: "1.0.0",
+      type: "searchResult",
+      source: PLUGIN_ID,
+      list: "comicGrid",
+    },
+    data: { items: parsed.items, hasReachedMax: true },
+  };
+}
+
+const RANK_TYPE_OPTIONS = [
+  { label: "新书榜", value: "new" },
+  { label: "人气榜", value: "hot" },
+  { label: "完结榜", value: "completed" },
+  { label: "推荐榜", value: "recommended" },
+] as const;
+
+async function getRankingFilterBundle(
+  payload: SearchComicPayload = {},
+): Promise<FilterBundleContract> {
+  const flat = toStringMap(payload);
+  const extern = toStringMap(payload.extern);
+  const rankType = normalizeRankType(flat.rankType ?? extern.rankType ?? "hot");
+  return {
+    source: PLUGIN_ID,
+    scheme: {
+      version: "1.0.0",
+      type: "rankingFilter",
+      title: "排行榜筛选",
+      fields: [
+        {
+          key: "rankType",
+          kind: "choice" as const,
+          label: "榜单",
+          options: RANK_TYPE_OPTIONS.map((option) => ({
+            label: option.label,
+            value: option.value,
+            result: { extern: { rankType: option.value } },
+          })),
+        },
+      ],
+    },
+    data: { values: { rankType } },
+  };
+}
+
+async function getCategoryData(
+  payload: SearchComicPayload = {},
+): Promise<ComicPagedListContract> {
+  const flat = toStringMap(payload);
+  const extern = toStringMap(payload.extern);
+  const tag = normalizeBooklistTag(flat.tag ?? extern.tag ?? "全部");
+  const area = normalizeBooklistArea(flat.area ?? extern.area ?? "-1");
+  const end = normalizeBooklistEnd(flat.end ?? extern.end ?? "-1");
+  const page = Math.max(1, Math.floor(Number(payload.page ?? 1) || 1));
+  const url = buildBooklistUrl(tag, area, end, page);
+  const html = await fetchHtml(url);
+  const parsed = parseBooklistPage(html, tag, area, end, page, url);
+  return {
+    source: PLUGIN_ID,
+    extern: {
+      ...extern,
+      source: "category",
+      tag: parsed.tag,
+      area: parsed.area,
+      end: parsed.end,
+    },
+    scheme: {
+      version: "1.0.0",
+      type: "searchResult",
+      source: PLUGIN_ID,
+      list: "comicGrid",
+    },
+    data: { items: parsed.items, hasReachedMax: parsed.hasReachedMax },
+  };
+}
+
+async function getCategoryFilterBundle(
+  payload: SearchComicPayload = {},
+): Promise<FilterBundleContract> {
+  const flat = toStringMap(payload);
+  const extern = toStringMap(payload.extern);
+  const tag = normalizeBooklistTag(flat.tag ?? extern.tag ?? "全部");
+  const area = normalizeBooklistArea(flat.area ?? extern.area ?? "-1");
+  const end = normalizeBooklistEnd(flat.end ?? extern.end ?? "-1");
+  return {
+    source: PLUGIN_ID,
+    scheme: {
+      version: "1.0.0",
+      type: "categoryFilter",
+      title: "分类筛选",
+      fields: [
+        {
+          key: "end",
+          kind: "choice" as const,
+          label: "进度",
+          options: BOOKLIST_ENDS.map((option) => ({
+            label: option.label,
+            value: option.value,
+            result: { extern: { end: option.value } },
+          })),
+        },
+        {
+          key: "area",
+          kind: "choice" as const,
+          label: "地区",
+          options: BOOKLIST_AREAS.map((option) => ({
+            label: option.label,
+            value: option.value,
+            result: { extern: { area: option.value } },
+          })),
+        },
+        {
+          key: "tag",
+          kind: "choice" as const,
+          label: "分类",
+          options: BOOKLIST_TAGS.map((name) => ({
+            label: name,
+            value: name,
+            result: { extern: { tag: name } },
+          })),
+        },
+      ],
+    },
+    data: { values: { end, area, tag } },
+  };
+}
+
 async function getSettingsBundle(): Promise<SettingsBundleContract> {
   return {
     source: PLUGIN_ID,
@@ -355,6 +551,11 @@ export default {
   getComicDetail,
   getChapter,
   getReadSnapshot,
+  getComicListSceneBundle,
+  getRankingData,
+  getRankingFilterBundle,
+  getCategoryData,
+  getCategoryFilterBundle,
   getSettingsBundle,
   getCapabilitiesBundle,
   fetchImageBytes,
