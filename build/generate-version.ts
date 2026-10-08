@@ -20,4 +20,3 @@ void main().catch((error) => {
   console.error("[version] generate failed:", error);
   process.exit(1);
 });
-

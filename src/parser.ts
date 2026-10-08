@@ -9,7 +9,6 @@ import type {
   MetadataListItem,
   RecommendItem,
   SearchResultContract,
-  StringMap,
 } from "breeze-plugin-kit";
 import {
   BASE_URL,
@@ -19,7 +18,6 @@ import {
   createImage,
   createMetadata,
   createRecommendItem,
-  createSearchAction,
   createPaging,
   normalizeUrl,
   parseBookId,
@@ -73,7 +71,7 @@ function itemScope(anchor: BreezeSelection): BreezeSelection {
 }
 
 function parseComicItem(
-  root: BreezeApi,
+  _root: BreezeApi,
   anchor: BreezeSelection,
   baseUrl: string,
 ): ComicListItem | null {
@@ -83,9 +81,7 @@ function parseComicItem(
 
   const scope = itemScope(anchor);
   const title =
-    attr(anchor, "title") ||
-    firstText(scope, "h2.title a, .manga-list-2-title a") ||
-    text(anchor);
+    attr(anchor, "title") || firstText(scope, "h2.title a, .manga-list-2-title a") || text(anchor);
   if (!title) return null;
 
   const itemText = text(scope);
@@ -94,10 +90,7 @@ function parseComicItem(
     .trim();
   const status = /完結|完结/iu.test(itemText) ? "完结" : "";
   const updatedAt = parseDate(itemText);
-  const subtitle = firstText(
-    scope,
-    ".chapter, .manga-list-2-tip, .update-time, .mh-list-2-tip",
-  );
+  const subtitle = firstText(scope, ".chapter, .manga-list-2-tip, .update-time, .mh-list-2-tip");
   const coverUrl = getImageUrl(scope, baseUrl);
 
   return createComicItem({
@@ -130,14 +123,14 @@ function parseComicItems(
 ): ComicListItem[] {
   const result: ComicListItem[] = [];
   const seen = new Set<string>();
-  scope.find('a[href*="/book/"], a[href^="book/"]').each(
-    (_index: number, element: BreezeSelection) => {
+  scope
+    .find('a[href*="/book/"], a[href^="book/"]')
+    .each((_index: number, element: BreezeSelection) => {
       const item = parseComicItem(root, root(element), baseUrl);
       if (!item || seen.has(item.id)) return;
       seen.add(item.id);
       result.push(item);
-    },
-  );
+    });
   return result;
 }
 
@@ -269,43 +262,34 @@ export function parseBooklistPage(
 
 function parseLabeledFields(scope: BreezeSelection): Record<string, string> {
   const fields: Record<string, string> = {};
-  scope.find("span.block").each(
-    (_index: number, element: BreezeSelection) => {
-      const value = text(element);
-      const match = value.match(/^([^:：]+)\s*[:：]\s*(.*)$/u);
-      if (match) fields[match[1].trim()] = match[2].trim();
-    },
-  );
+  scope.find("span.block").each((_index: number, element: BreezeSelection) => {
+    const value = text(element);
+    const match = value.match(/^([^:：]+)\s*[:：]\s*(.*)$/u);
+    if (match) fields[match[1].trim()] = match[2].trim();
+  });
   return fields;
 }
 
 function readSubtitle(scope: BreezeSelection, label: string): string {
   let result = "";
-  scope.find("p.subtitle").each(
-    (_index: number, element: BreezeSelection) => {
-      const value = text(element);
-      const match = value.match(new RegExp("^" + label + "\\s*[:：]?\\s*(.*)$", "u"));
-      if (match && !result) result = match[1].trim();
-    },
-  );
+  scope.find("p.subtitle").each((_index: number, element: BreezeSelection) => {
+    const value = text(element);
+    const match = value.match(new RegExp("^" + label + "\\s*[:：]?\\s*(.*)$", "u"));
+    if (match && !result) result = match[1].trim();
+  });
   return result;
 }
 
 function parseTags(scope: BreezeSelection): string[] {
   const values: string[] = [];
-  scope.find('p.tip a[href*="tag="]').each(
-    (_index: number, element: BreezeSelection) => {
-      const value = text(element);
-      if (value) values.push(value);
-    },
-  );
+  scope.find('p.tip a[href*="tag="]').each((_index: number, element: BreezeSelection) => {
+    const value = text(element);
+    if (value) values.push(value);
+  });
   return uniqueStrings(values);
 }
 
-function parseChapters(
-  scope: BreezeSelection,
-  bookId: string,
-): ChapterSummary[] {
+function parseChapters(scope: BreezeSelection, bookId: string): ChapterSummary[] {
   const result: ChapterSummary[] = [];
   const seen = new Set<string>();
   let chapterLinks = scope.find('#detail-list-select a[href*="/chapter/"]');
@@ -323,7 +307,7 @@ function parseChapters(
       requestId: chapterId,
       logicalKey: bookId + ":" + chapterId,
       storageChapterId: chapterId,
-      name: attr(link, "title") || text(link) || ("章节 " + chapterId),
+      name: attr(link, "title") || text(link) || "章节 " + chapterId,
       order: result.length + 1,
       extern: { bookId, chapterId },
     });
@@ -338,8 +322,9 @@ function parseRelatedItems(
 ): RecommendItem[] {
   const result: RecommendItem[] = [];
   const seen = new Set<string>();
-  scope.find('a[href*="/book/"], a[href^="book/"]').each(
-    (_index: number, element: BreezeSelection) => {
+  scope
+    .find('a[href*="/book/"], a[href^="book/"]')
+    .each((_index: number, element: BreezeSelection) => {
       const anchor = root(element);
       const id = parseBookId(attr(anchor, "href"));
       if (!id || seen.has(id)) return;
@@ -367,8 +352,7 @@ function parseRelatedItems(
           },
         }),
       );
-    },
-  );
+    });
   return result;
 }
 
@@ -394,27 +378,19 @@ export function parseComicDetail(
   const root = loadHtml(html);
   const detail = root("section.banner_detail").first();
   const scope = detail.length > 0 ? detail : root("body");
-  const title = firstText(scope, "h1") || ("漫画 " + bookId);
-  const coverUrl = normalizeUrl(
-    attr(scope.find(".cover img").first(), "src"),
-    sourceUrl,
-  );
+  const title = firstText(scope, "h1") || "漫画 " + bookId;
+  const coverUrl = normalizeUrl(attr(scope.find(".cover img").first(), "src"), sourceUrl);
   const alias = readSubtitle(scope, "别名");
   const author = readSubtitle(scope, "作者");
   const tags = parseTags(scope);
   const fields = parseLabeledFields(scope.find("p.tip").first());
-  const region =
-    firstText(scope, "p.tip .ticai a") ||
-    fields["地区"] ||
-    fields["地域"] ||
-    "";
+  const region = firstText(scope, "p.tip .ticai a") || fields["地区"] || fields["地域"] || "";
   const description = firstText(scope, "p.content");
   const chapters = parseChapters(root("body"), bookId);
   const recommendations = parseRecommendations(root, sourceUrl);
   const status = fields["状态"] || "";
   const updatedAt = fields["更新时间"] || "";
   const views = readNumber(fields["点击"] || fields["浏览"]);
-  const creatorName = author || "未知作者";
   const metadata: MetadataListItem[] = [
     createMetadata("author", "作者", author ? [author] : []),
     createMetadata("tags", "标签", tags),
@@ -434,15 +410,11 @@ export function parseComicDetail(
         ...(alias ? [createActionItem("别名：" + alias)] : []),
       ],
       creator: {
-        id: author || "unknown",
-        name: creatorName,
-        avatar: createImage({
-          id: "author-" + (author || "unknown"),
-          url: coverUrl,
-          path: "comic/" + safePathSegment(bookId, "unknown") + "/author-v2.jpg",
-        }),
-        onTap: createSearchAction(author),
-        extern: { bookId, author },
+        id: "",
+        name: "",
+        avatar: createImage({ id: "", url: "", path: "" }),
+        onTap: null,
+        extern: {},
       },
       description,
       cover: createImage({
@@ -471,8 +443,11 @@ export function parseComicDetail(
     isFavourite: false,
     isLiked: false,
     allowComments: false,
+    allowCommentsReason: "JJ漫画暂不支持评论",
     allowLike: false,
+    allowLikeReason: "JJ漫画暂不支持点赞",
     allowCollected: false,
+    allowCollectedReason: "JJ漫画暂不支持收藏",
     allowDownload: chapters.length > 0,
     extern: { bookId, sourceUrl },
   };
@@ -529,10 +504,7 @@ export function parseChapterPage(
   const seen = new Set<string>();
   root(".comiclist img").each((_index: number, element: BreezeSelection) => {
     const image = element;
-    const raw =
-      attr(image, "data-original") ||
-      attr(image, "data-src") ||
-      attr(image, "src");
+    const raw = attr(image, "data-original") || attr(image, "data-src") || attr(image, "src");
     const imageUrl = normalizeUrl(raw, sourceUrl);
     if (!imageUrl || imageUrl.startsWith("data:") || seen.has(imageUrl)) return;
     seen.add(imageUrl);
@@ -541,20 +513,18 @@ export function parseChapterPage(
 
   let previousChapterId = "";
   let nextChapterId = "";
-  root('.fanye a[href*="/chapter/"]').each(
-    (_index: number, element: BreezeSelection) => {
-      const value = text(element);
-      const id = parseChapterId(attr(element, "href"));
-      if (!id) return;
-      if (/上一章|上一话/iu.test(value)) previousChapterId = id;
-      if (/下一章|下一话/iu.test(value)) nextChapterId = id;
-    },
-  );
+  root('.fanye a[href*="/chapter/"]').each((_index: number, element: BreezeSelection) => {
+    const value = text(element);
+    const id = parseChapterId(attr(element, "href"));
+    if (!id) return;
+    if (/上一章|上一话/iu.test(value)) previousChapterId = id;
+    if (/下一章|下一话/iu.test(value)) nextChapterId = id;
+  });
 
   const countText = text(root(".sidebar-header-r").first());
   return {
     chapterId,
-    title: firstText(root("body"), "h1") || ("章节 " + chapterId),
+    title: firstText(root("body"), "h1") || "章节 " + chapterId,
     bookId: parseBookId(attr(bookLink, "href")),
     bookTitle: text(bookLink),
     chapterCount: readNumber(countText.match(/\d+/u)?.[0]),

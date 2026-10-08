@@ -16,16 +16,9 @@ import type {
   SearchResultContract,
   SettingsBundleContract,
   CapabilitiesBundleContract,
-  StringMap,
 } from "breeze-plugin-kit";
 import { runtime } from "breeze-plugin-kit";
-import {
-  BASE_URL,
-  PLUGIN_ID,
-  readString,
-  safePathSegment,
-  toStringMap,
-} from "./common";
+import { BASE_URL, PLUGIN_ID, readString, toStringMap } from "./common";
 import {
   buildBookUrl,
   buildBooklistUrl,
@@ -63,9 +56,7 @@ async function getInfo(): Promise<InfoContract> {
   return buildPluginInfo();
 }
 
-async function searchComic(
-  payload: SearchComicPayload = {},
-): Promise<SearchResultContract> {
+async function searchComic(payload: SearchComicPayload = {}): Promise<SearchResultContract> {
   const page = Math.max(1, Math.floor(Number(payload.page ?? 1) || 1));
   const keyword = readString(payload.keyword ?? toStringMap(payload.extern).keyword);
   if (!keyword) {
@@ -101,9 +92,7 @@ async function searchComic(
   return result;
 }
 
-async function getComicDetail(
-  payload: ComicDetailPayload = {},
-): Promise<ComicDetailContract> {
+async function getComicDetail(payload: ComicDetailPayload = {}): Promise<ComicDetailContract> {
   const bookId = requireValue(payload.comicId, "comicId");
   const url = buildBookUrl(bookId);
   const html = await fetchHtml(url);
@@ -136,10 +125,7 @@ function createFallbackChapter(
   };
 }
 
-async function loadChapterData(
-  bookId: string,
-  chapterId: string,
-): Promise<LoadedChapterData> {
+async function loadChapterData(bookId: string, chapterId: string): Promise<LoadedChapterData> {
   const bookUrl = buildBookUrl(bookId);
   const chapterUrl = buildChapterUrl(chapterId);
   const [bookHtml, chapterHtml] = await Promise.all([
@@ -156,19 +142,8 @@ async function loadChapterData(
         item.requestId === chapterId ||
         item.logicalKey === chapterId ||
         item.storageChapterId === chapterId,
-    ) ??
-    createFallbackChapter(
-      bookId,
-      chapterId,
-      pageData.title,
-      chapters.length + 1,
-    );
-  const pages = createChapterPages(
-    bookId,
-    chapterId,
-    pageData.imageUrls,
-    chapterUrl,
-  );
+    ) ?? createFallbackChapter(bookId, chapterId, pageData.title, chapters.length + 1);
+  const pages = createChapterPages(bookId, chapterId, pageData.imageUrls, chapterUrl);
   if (pages.length === 0) {
     throw new Error("章节没有返回图片：" + chapterId);
   }
@@ -190,9 +165,7 @@ async function loadChapterData(
   };
 }
 
-async function getChapter(
-  payload: ChapterPayload = {},
-): Promise<ChapterContentContract> {
+async function getChapter(payload: ChapterPayload = {}): Promise<ChapterContentContract> {
   const bookId = requireValue(payload.comicId, "comicId");
   const chapterId = requireValue(payload.chapterId, "chapterId");
   const loaded = await loadChapterData(bookId, chapterId);
@@ -227,9 +200,7 @@ async function getChapter(
   };
 }
 
-async function getReadSnapshot(
-  payload: ReadSnapshotPayload = {},
-): Promise<ReadSnapshotContract> {
+async function getReadSnapshot(payload: ReadSnapshotPayload = {}): Promise<ReadSnapshotContract> {
   const bookId = requireValue(payload.comicId, "comicId");
   const chapterId = requireValue(payload.chapterId, "chapterId");
   const loaded = await loadChapterData(bookId, chapterId);
@@ -290,9 +261,7 @@ async function getComicListSceneBundle(): Promise<ComicListSceneBundleContract> 
   };
 }
 
-async function getRankingData(
-  payload: SearchComicPayload = {},
-): Promise<ComicPagedListContract> {
+async function getRankingData(payload: SearchComicPayload = {}): Promise<ComicPagedListContract> {
   const flat = toStringMap(payload);
   const extern = toStringMap(payload.extern);
   const rankType = normalizeRankType(flat.rankType ?? extern.rankType ?? "hot");
@@ -362,9 +331,7 @@ async function getRankingFilterBundle(
   };
 }
 
-async function getCategoryData(
-  payload: SearchComicPayload = {},
-): Promise<ComicPagedListContract> {
+async function getCategoryData(payload: SearchComicPayload = {}): Promise<ComicPagedListContract> {
   const flat = toStringMap(payload);
   const extern = toStringMap(payload.extern);
   const tag = normalizeBooklistTag(flat.tag ?? extern.tag ?? "全部");
@@ -511,9 +478,7 @@ async function fetchImageBytes(
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (!looksLikeImage(bytes)) {
-    throw new Error(
-      "图片响应不是有效的图像数据（可能是站点错误页）：" + parsed.href,
-    );
+    throw new Error("图片响应不是有效的图像数据（可能是站点错误页）：" + parsed.href);
   }
   return bytes;
 }
@@ -524,25 +489,55 @@ function looksLikeImage(bytes: Uint8Array): boolean {
   }
   if (
     bytes.length >= 8 &&
-    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
-    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
   ) {
     return true;
   }
-  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38
+  ) {
     return true;
   }
   if (
     bytes.length >= 12 &&
-    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
   ) {
     return true;
   }
-  if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  ) {
     return true;
   }
-  return bytes.length >= 4 && bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00;
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x00 &&
+    bytes[1] === 0x00 &&
+    bytes[2] === 0x01 &&
+    bytes[3] === 0x00
+  );
 }
 
 export default {

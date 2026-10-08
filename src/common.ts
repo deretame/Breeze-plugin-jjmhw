@@ -15,13 +15,13 @@ export const FALLBACK_IMAGE_URL = BASE_URL + "/favicon.ico";
 export const PLACEHOLDER_IMAGE_PATH = "placeholder/jjmhw.jpg";
 
 export function toStringMap(value: unknown): StringMap {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as StringMap)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as StringMap) : {};
 }
 
 export function readString(value: unknown): string {
-  return String(value ?? "").replace(/\s+/gu, " ").trim();
+  return String(value ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 export function readNumber(value: unknown, fallback = 0): number {
@@ -31,6 +31,7 @@ export function readNumber(value: unknown, fallback = 0): number {
 
 export function safePathSegment(value: unknown, fallback: string): string {
   const normalized = readString(value)
+    // oxlint-disable-next-line no-control-regex -- intentional: strip control chars from path segments
     .replace(/[\\/:*?"<>|\u0000-\u001f]+/gu, "_")
     .trim();
   return normalized || fallback;
@@ -94,11 +95,7 @@ export function createImage(
   };
 }
 
-export function createMetadata(
-  type: string,
-  name: string,
-  values: string[],
-): MetadataListItem {
+export function createMetadata(type: string, name: string, values: string[]): MetadataListItem {
   return {
     type,
     name,

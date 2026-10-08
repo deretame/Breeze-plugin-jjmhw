@@ -6,15 +6,10 @@ export function buildPluginInfo(): InfoContract {
     name: "JJ漫画",
     uuid: PLUGIN_ID,
     iconUrl: BASE_URL + "/favicon.ico",
-    creator: {
-      name: "Breeze",
-      describe: "jjmhw.cc 漫画源适配",
-    },
     describe: "JJ漫画源插件",
-    version: "0.3.0",
+    version: "0.3.1",
     home: "https://github.com/deretame/Breeze-plugin-jjmhw",
-    updateUrl:
-      "https://api.github.com/repos/deretame/Breeze-plugin-jjmhw/releases/latest",
+    updateUrl: "https://api.github.com/repos/deretame/Breeze-plugin-jjmhw/releases/latest",
     npmName: "breeze-plugin-jjmhw",
     function: [
       {

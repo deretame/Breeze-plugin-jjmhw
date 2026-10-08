@@ -24,12 +24,7 @@ export function buildRankUrl(): string {
   return `${BASE_URL}/rank`;
 }
 
-export function buildBooklistUrl(
-  tag: string,
-  area: string,
-  end: string,
-  page = 1,
-): string {
+export function buildBooklistUrl(tag: string, area: string, end: string, page = 1): string {
   const params = new URLSearchParams({
     tag: tag || "全部",
     area: area || "-1",
