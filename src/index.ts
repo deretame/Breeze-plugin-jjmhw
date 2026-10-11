@@ -10,15 +10,32 @@ import type {
   FetchImageBytesPayload,
   FilterBundleContract,
   InfoContract,
+  LoginBundleContract,
+  LoginSubmitResult,
   ReadSnapshotContract,
   ReadSnapshotPayload,
   SearchComicPayload,
   SearchResultContract,
   SettingsBundleContract,
   CapabilitiesBundleContract,
+  FavoriteWorkflowContinuePayload,
+  FavoriteWorkflowResult,
+  FavoriteWorkflowStartPayload,
 } from "breeze-plugin-kit";
-import { runtime } from "breeze-plugin-kit";
+import {
+  buildLoginBundle,
+  buildUnauthorizedError,
+  readLoginValues,
+  runtime,
+} from "breeze-plugin-kit";
 import { BASE_URL, PLUGIN_ID, readString, toStringMap } from "./common";
+import {
+  fetchFavoriteShelfHtml,
+  loadAuthCredentials,
+  login as loginToSite,
+  logout as logoutFromAuth,
+  setFavoriteRemote,
+} from "./auth";
 import {
   buildBookUrl,
   buildBooklistUrl,
@@ -40,6 +57,7 @@ import {
   parseBooklistPage,
   parseChapterPage,
   parseComicDetail,
+  parseFavoriteShelfPage,
   parseRankPage,
   parseSearchResult,
   type ParsedChapterPage,
@@ -229,6 +247,75 @@ async function getReadSnapshot(payload: ReadSnapshotPayload = {}): Promise<ReadS
         order: item.order,
         extern: item.extern,
       })),
+    },
+  };
+}
+type CloudFavoritePayload = {
+  page?: number;
+  extern?: Record<string, unknown>;
+};
+
+async function getCloudFavoriteData(
+  payload: CloudFavoritePayload = {},
+): Promise<ComicPagedListContract> {
+  const page = Math.max(1, Math.floor(Number(payload.page ?? 1) || 1));
+  const html = await fetchFavoriteShelfHtml(page);
+  const parsed = parseFavoriteShelfPage(html, page);
+  if (parsed.loggedOut) {
+    throw buildUnauthorizedError(PLUGIN_ID, "登录过期，请重新登录");
+  }
+  return {
+    source: PLUGIN_ID,
+    extern: { ...toStringMap(payload.extern), source: "cloudFavorite", page },
+    scheme: {
+      version: "1.0.0" as const,
+      type: "cloudFavoriteFeed",
+      card: "comicGrid",
+    },
+    data: {
+      items: parsed.items,
+      hasReachedMax: parsed.hasReachedMax,
+    },
+  };
+}
+
+async function getCloudFavoriteFilterBundle(): Promise<FilterBundleContract> {
+  return {
+    source: PLUGIN_ID,
+    scheme: {
+      version: "1.0.0" as const,
+      type: "filter" as const,
+      title: "云端收藏筛选",
+      fields: [],
+    },
+    data: { values: {} },
+  };
+}
+
+async function getCloudFavoriteSceneBundle(): Promise<ComicListSceneBundleContract> {
+  return {
+    source: PLUGIN_ID,
+    scheme: {
+      version: "1.0.0" as const,
+      type: "comicListSceneBundle" as const,
+    },
+    data: {
+      scene: {
+        title: "云端收藏",
+        source: PLUGIN_ID,
+        body: {
+          type: "pluginPagedComicList" as const,
+          request: {
+            fnPath: "getCloudFavoriteData",
+            core: {},
+            extern: { source: "cloudFavorite" },
+          },
+        },
+        filter: {
+          fnPath: "getCloudFavoriteFilterBundle",
+          extern: { source: "cloudFavorite" },
+        },
+      },
     },
   };
 }
@@ -539,6 +626,130 @@ function looksLikeImage(bytes: Uint8Array): boolean {
     bytes[3] === 0x00
   );
 }
+type LoginPayload = {
+  account?: string;
+  password?: string;
+  values?: Record<string, unknown>;
+};
+
+async function loginWithPassword(payload: LoginPayload = {}): Promise<LoginSubmitResult> {
+  const record = payload as Record<string, unknown>;
+  let account = "";
+  let password = "";
+  if (record.values !== undefined) {
+    const kitValues = readLoginValues(payload);
+    account = kitValues.account ?? "";
+    password = kitValues.password ?? "";
+  } else {
+    account = readString(record.account).trim();
+    password = readString(record.password);
+  }
+  await loginToSite({ account, password });
+  return {
+    source: PLUGIN_ID,
+    message: "登录成功，已保存登录状态",
+    data: { account },
+  };
+}
+
+/**
+ * 新版云端收藏工作流：jjmhw 无收藏夹概念，add/removeAll 直接完成。
+ * 会话失效时用已存账密自动重登一次兜底。
+ */
+async function startFavoriteAction(
+  payload: FavoriteWorkflowStartPayload = { comicId: "", action: "add" },
+): Promise<FavoriteWorkflowResult> {
+  const comicId = String(payload.comicId ?? "").trim();
+  if (!comicId) {
+    return {
+      status: "failed",
+      errorCode: "INVALID_COMIC_ID",
+      message: "comicId 不能为空",
+    };
+  }
+  const action = payload.action;
+  if (action !== "add" && action !== "removeAll") {
+    return {
+      status: "failed",
+      errorCode: "UNSUPPORTED_ACTION",
+      message: "当前图源只支持全局收藏和全局取消收藏",
+    };
+  }
+  const favored = action === "add";
+  try {
+    const result = await setFavoriteRemote(comicId, favored);
+    return { status: "completed", favorited: result.favored, committed: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/登录|login|unauthorized|401/i.test(message)) {
+      return { status: "failed", errorCode: "FAVORITE_REQUEST_FAILED", message };
+    }
+    const { account, password } = await loadAuthCredentials();
+    if (!account || !password) {
+      return { status: "failed", errorCode: "NOT_LOGGED_IN", message };
+    }
+    try {
+      await loginToSite({ account, password });
+      const result = await setFavoriteRemote(comicId, favored);
+      return { status: "completed", favorited: result.favored, committed: true };
+    } catch (retryError) {
+      const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+      return { status: "failed", errorCode: "FAVORITE_REQUEST_FAILED", message: retryMessage };
+    }
+  }
+}
+
+/**
+ * jjmhw 不会产生需要用户输入的继续令牌；保留该 fnPath 是为了完整
+ * 实现新版契约，对外部误传的 continuationToken 给出失败结果。
+ */
+async function continueFavoriteAction(
+  payload: FavoriteWorkflowContinuePayload = {
+    comicId: "",
+    action: "add",
+    continuationToken: "",
+    input: {},
+  },
+): Promise<FavoriteWorkflowResult> {
+  if (!String(payload.comicId ?? "").trim()) {
+    return { status: "failed", errorCode: "INVALID_COMIC_ID", message: "comicId 不能为空" };
+  }
+  return {
+    status: "failed",
+    errorCode: "UNSUPPORTED_CONTINUATION",
+    message: "当前收藏操作不需要继续交互",
+  };
+}
+
+async function logoutAccount(): Promise<Record<string, unknown>> {
+  await logoutFromAuth();
+  return { ok: true };
+}
+
+async function getLoginBundle(): Promise<LoginBundleContract> {
+  const { account, password } = await loadAuthCredentials();
+  return buildLoginBundle(PLUGIN_ID, {
+    title: "JJ漫画登录",
+    fields: [
+      { key: "account", kind: "text", label: "账号", required: true },
+      { key: "password", kind: "password", label: "密码", required: true },
+    ],
+    submitFnPath: "loginWithPassword",
+    submitText: "登录",
+    values: { account, password },
+  });
+}
+
+async function init(): Promise<void> {
+  // 无验证码：有账密就自动登录一次拿会话，失败不阻断公开浏览。
+  const { account, password } = await loadAuthCredentials();
+  if (!account || !password) return;
+  try {
+    await loginToSite({ account, password });
+  } catch {
+    // 忽略：各接口会返回明确的业务错误，宿主引导用户去登录页。
+  }
+}
 
 export default {
   getInfo,
@@ -547,6 +758,9 @@ export default {
   getChapter,
   getReadSnapshot,
   getComicListSceneBundle,
+  getCloudFavoriteData,
+  getCloudFavoriteFilterBundle,
+  getCloudFavoriteSceneBundle,
   getRankingData,
   getRankingFilterBundle,
   getCategoryData,
@@ -554,4 +768,10 @@ export default {
   getSettingsBundle,
   getCapabilitiesBundle,
   fetchImageBytes,
+  getLoginBundle,
+  loginWithPassword,
+  logoutAccount,
+  startFavoriteAction,
+  continueFavoriteAction,
+  init,
 };

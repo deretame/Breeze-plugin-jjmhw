@@ -159,6 +159,37 @@ export function parseSearchResult(
     items,
   };
 }
+export type ParsedFavoriteShelfPage = {
+  page: number;
+  hasReachedMax: boolean;
+  loggedOut: boolean;
+  items: ComicListItem[];
+};
+
+/**
+ * 解析书架页（GET /bookshelf）：服务端直出 ul.mh-list，无 Vue。
+ * 未登录会被踢到登录页（title 含“用户登录”），此时 loggedOut 为 true，
+ * index 层抛 unauthorized 引导登录。
+ * 分页：.page-pagination 无页码时缺省单页；hidCount 恒 0 不可用，
+ * 尾页按“本页条数 < 页大小”判定（站内列表页大小 20）。
+ */
+export function parseFavoriteShelfPage(html: string, page: number): ParsedFavoriteShelfPage {
+  const root = loadHtml(html);
+  const title = text(root("title"));
+  if (/用户登录/u.test(title)) {
+    return { page, hasReachedMax: true, loggedOut: true, items: [] };
+  }
+  const list = root("ul.mh-list").first();
+  const scope = list.length > 0 ? list : root("body");
+  const items = parseComicItems(root, scope, BASE_URL);
+  const pageNumbers: number[] = [];
+  root(".page-pagination a").each((_index: number, element: BreezeSelection) => {
+    const label = readNumber(text(root(element)));
+    if (label > 0) pageNumbers.push(label);
+  });
+  const pages = pageNumbers.length > 0 ? Math.max(...pageNumbers) : 1;
+  return { page, hasReachedMax: page >= pages || items.length < 20, loggedOut: false, items };
+}
 
 export const BOOKLIST_TAGS = [
   "全部",

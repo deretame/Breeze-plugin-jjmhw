@@ -3,7 +3,7 @@
   "uuid": "d6f2f13a-b4d0-4f6c-9c6d-8a9f1a2b7c31",
   "iconUrl": "https://www.jjmhw.cc/favicon.ico",
   "describe": "JJ漫画源插件",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "home": "https://github.com/deretame/Breeze-plugin-jjmhw",
   "updateUrl": "https://api.github.com/repos/deretame/Breeze-plugin-jjmhw/releases/latest",
   "npmName": "breeze-plugin-jjmhw",
@@ -66,6 +66,36 @@
                 "tag": "全部",
                 "area": "-1",
                 "end": "-1"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "cloudFavorite",
+      "title": "云端收藏",
+      "action": {
+        "type": "openComicList",
+        "payload": {
+          "scene": {
+            "title": "云端收藏",
+            "source": "d6f2f13a-b4d0-4f6c-9c6d-8a9f1a2b7c31",
+            "body": {
+              "type": "pluginPagedComicList",
+              "request": {
+                "fnPath": "getCloudFavoriteData",
+                "core": {},
+                "extern": {
+                  "source": "cloudFavorite"
+                }
+              }
+            },
+            "filter": {
+              "fnPath": "getCloudFavoriteFilterBundle",
+              "core": {},
+              "extern": {
+                "source": "cloudFavorite"
               }
             }
           }

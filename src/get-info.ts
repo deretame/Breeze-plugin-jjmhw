@@ -7,7 +7,7 @@ export function buildPluginInfo(): InfoContract {
     uuid: PLUGIN_ID,
     iconUrl: BASE_URL + "/favicon.ico",
     describe: "JJ漫画源插件",
-    version: "0.3.1",
+    version: "0.3.2",
     home: "https://github.com/deretame/Breeze-plugin-jjmhw",
     updateUrl: "https://api.github.com/repos/deretame/Breeze-plugin-jjmhw/releases/latest",
     npmName: "breeze-plugin-jjmhw",
@@ -67,6 +67,32 @@ export function buildPluginInfo(): InfoContract {
                   area: "-1",
                   end: "-1",
                 },
+              },
+            },
+          },
+        },
+      },
+      {
+        id: "cloudFavorite",
+        title: "云端收藏",
+        action: {
+          type: "openComicList" as const,
+          payload: {
+            scene: {
+              title: "云端收藏",
+              source: PLUGIN_ID,
+              body: {
+                type: "pluginPagedComicList" as const,
+                request: {
+                  fnPath: "getCloudFavoriteData",
+                  core: {},
+                  extern: { source: "cloudFavorite" },
+                },
+              },
+              filter: {
+                fnPath: "getCloudFavoriteFilterBundle",
+                core: {},
+                extern: { source: "cloudFavorite" },
               },
             },
           },
