@@ -156,6 +156,22 @@ export async function fetchFavoriteShelfHtml(page: number): Promise<string> {
   }
   return response.text();
 }
+/**
+ * 带登录 cookie 取 HTML（详情页按钮态需登录态才真实；无 cookie 时与匿名一致）。
+ */
+export async function fetchAuthedHtml(url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: {
+      ...REQUEST_HEADERS,
+      ...(await cookieHeader()),
+      Referer: `${BASE_URL}/`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`请求失败：HTTP ${response.status}`);
+  }
+  return response.text();
+}
 async function authedFormPost(path: string, data: Record<string, string>): Promise<unknown> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "POST",

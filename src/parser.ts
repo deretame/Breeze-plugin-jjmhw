@@ -291,36 +291,36 @@ export function parseBooklistPage(
   return { tag, area, end, page, pages, hasReachedMax: page >= pages, items };
 }
 
-function parseLabeledFields(scope: BreezeSelection): Record<string, string> {
+function parseLabeledFields(root: BreezeApi, scope: BreezeSelection): Record<string, string> {
   const fields: Record<string, string> = {};
   scope.find("span.block").each((_index: number, element: BreezeSelection) => {
-    const value = text(element);
+    const value = text(root(element));
     const match = value.match(/^([^:：]+)\s*[:：]\s*(.*)$/u);
     if (match) fields[match[1].trim()] = match[2].trim();
   });
   return fields;
 }
 
-function readSubtitle(scope: BreezeSelection, label: string): string {
+function readSubtitle(root: BreezeApi, scope: BreezeSelection, label: string): string {
   let result = "";
   scope.find("p.subtitle").each((_index: number, element: BreezeSelection) => {
-    const value = text(element);
+    const value = text(root(element));
     const match = value.match(new RegExp("^" + label + "\\s*[:：]?\\s*(.*)$", "u"));
     if (match && !result) result = match[1].trim();
   });
   return result;
 }
 
-function parseTags(scope: BreezeSelection): string[] {
+function parseTags(root: BreezeApi, scope: BreezeSelection): string[] {
   const values: string[] = [];
   scope.find('p.tip a[href*="tag="]').each((_index: number, element: BreezeSelection) => {
-    const value = text(element);
+    const value = text(root(element));
     if (value) values.push(value);
   });
   return uniqueStrings(values);
 }
 
-function parseChapters(scope: BreezeSelection, bookId: string): ChapterSummary[] {
+function parseChapters(root: BreezeApi, scope: BreezeSelection, bookId: string): ChapterSummary[] {
   const result: ChapterSummary[] = [];
   const seen = new Set<string>();
   let chapterLinks = scope.find('#detail-list-select a[href*="/chapter/"]');
@@ -329,7 +329,7 @@ function parseChapters(scope: BreezeSelection, bookId: string): ChapterSummary[]
   }
 
   chapterLinks.each((_index: number, element: BreezeSelection) => {
-    const link = element;
+    const link = root(element);
     const chapterId = parseChapterId(attr(link, "href"));
     if (!chapterId || seen.has(chapterId)) return;
     seen.add(chapterId);
@@ -390,9 +390,10 @@ function parseRelatedItems(
 function parseRecommendations(root: BreezeApi, baseUrl: string): RecommendItem[] {
   let result: RecommendItem[] = [];
   root("div.index-title").each((_index: number, element: BreezeSelection) => {
-    const title = text(element.find("h2").first());
+    const entry = root(element);
+    const title = text(entry.find("h2").first());
     if (!/相关推荐|相关推荐/iu.test(title)) return;
-    const next = element.next(".index-manga");
+    const next = entry.next(".index-manga");
     if (next.length > 0) result = parseRelatedItems(root, next, baseUrl);
   });
   if (result.length === 0) {
@@ -411,13 +412,13 @@ export function parseComicDetail(
   const scope = detail.length > 0 ? detail : root("body");
   const title = firstText(scope, "h1") || "漫画 " + bookId;
   const coverUrl = normalizeUrl(attr(scope.find(".cover img").first(), "src"), sourceUrl);
-  const alias = readSubtitle(scope, "别名");
-  const author = readSubtitle(scope, "作者");
-  const tags = parseTags(scope);
-  const fields = parseLabeledFields(scope.find("p.tip").first());
+  const alias = readSubtitle(root, scope, "别名");
+  const author = readSubtitle(root, scope, "作者");
+  const tags = parseTags(root, scope);
+  const fields = parseLabeledFields(root, scope.find("p.tip").first());
   const region = firstText(scope, "p.tip .ticai a") || fields["地区"] || fields["地域"] || "";
   const description = firstText(scope, "p.content");
-  const chapters = parseChapters(root("body"), bookId);
+  const chapters = parseChapters(root, root("body"), bookId);
   const recommendations = parseRecommendations(root, sourceUrl);
   const status = fields["状态"] || "";
   const updatedAt = fields["更新时间"] || "";
@@ -471,14 +472,14 @@ export function parseComicDetail(
     totalViews: views,
     totalLikes: 0,
     totalComments: 0,
-    isFavourite: false,
+    // 详情页 #addfavor[data-val] 即当前收藏态：1 已收藏，0/缺席未收藏。
+    isFavourite: attr(scope.find("#addfavor").first(), "data-val") === "1",
     isLiked: false,
     allowComments: false,
     allowCommentsReason: "JJ漫画暂不支持评论",
     allowLike: false,
     allowLikeReason: "JJ漫画暂不支持点赞",
-    allowCollected: false,
-    allowCollectedReason: "JJ漫画暂不支持收藏",
+    allowCollected: true,
     allowDownload: chapters.length > 0,
     extern: { bookId, sourceUrl },
   };
@@ -534,7 +535,7 @@ export function parseChapterPage(
   const imageUrls: string[] = [];
   const seen = new Set<string>();
   root(".comiclist img").each((_index: number, element: BreezeSelection) => {
-    const image = element;
+    const image = root(element);
     const raw = attr(image, "data-original") || attr(image, "data-src") || attr(image, "src");
     const imageUrl = normalizeUrl(raw, sourceUrl);
     if (!imageUrl || imageUrl.startsWith("data:") || seen.has(imageUrl)) return;
@@ -545,8 +546,9 @@ export function parseChapterPage(
   let previousChapterId = "";
   let nextChapterId = "";
   root('.fanye a[href*="/chapter/"]').each((_index: number, element: BreezeSelection) => {
-    const value = text(element);
-    const id = parseChapterId(attr(element, "href"));
+    const anchor = root(element);
+    const value = text(anchor);
+    const id = parseChapterId(attr(anchor, "href"));
     if (!id) return;
     if (/上一章|上一话/iu.test(value)) previousChapterId = id;
     if (/下一章|下一话/iu.test(value)) nextChapterId = id;

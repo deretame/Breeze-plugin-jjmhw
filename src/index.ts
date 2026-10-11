@@ -30,6 +30,7 @@ import {
 } from "breeze-plugin-kit";
 import { BASE_URL, PLUGIN_ID, readString, toStringMap } from "./common";
 import {
+  fetchAuthedHtml,
   fetchFavoriteShelfHtml,
   loadAuthCredentials,
   login as loginToSite,
@@ -113,7 +114,7 @@ async function searchComic(payload: SearchComicPayload = {}): Promise<SearchResu
 async function getComicDetail(payload: ComicDetailPayload = {}): Promise<ComicDetailContract> {
   const bookId = requireValue(payload.comicId, "comicId");
   const url = buildBookUrl(bookId);
-  const html = await fetchHtml(url);
+  const html = await fetchAuthedHtml(url);
   const result = parseComicDetail(html, bookId, url);
   result.extern = payload.extern ?? result.extern;
   return result;
