@@ -10,7 +10,8 @@ import type {
 } from "breeze-plugin-kit";
 
 export const PLUGIN_ID = "d6f2f13a-b4d0-4f6c-9c6d-8a9f1a2b7c31";
-export const BASE_URL = "https://www.jjmhw.cc";
+// 全站走 d 域：www 域书架查询恒返回空（站方前端已坏），d 域读写全通，登录态两域通用。
+export const BASE_URL = "https://d.jjmhw.cc";
 export const FALLBACK_IMAGE_URL = BASE_URL + "/favicon.ico";
 export const PLACEHOLDER_IMAGE_PATH = "placeholder/jjmhw.jpg";
 
