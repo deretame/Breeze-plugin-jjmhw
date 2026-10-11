@@ -140,10 +140,16 @@ export async function login(payload: { account?: string; password?: string }): P
 /**
  * 取书架 HTML（GET /bookshelf?page=N，需登录 cookie）。
  * 未登录会被 302/200 到登录页，调用方以内容判定（见 parser）。
+ * 注意：www 域书架查询恒返回空列表（站方前端已坏，yqdm 未定义），
+ * 实测 d 域同 cookie 可读出全量收藏，故读走 d 域（登录态两域通用）。
  */
+const FAVORITE_SHELF_HOST = "https://d.jjmhw.cc";
 export async function fetchFavoriteShelfHtml(page: number): Promise<string> {
   const safePage = Math.max(1, Math.floor(page) || 1);
-  const url = safePage > 1 ? `${BASE_URL}/bookshelf?page=${safePage}` : `${BASE_URL}/bookshelf`;
+  const url =
+    safePage > 1
+      ? `${FAVORITE_SHELF_HOST}/bookshelf?page=${safePage}`
+      : `${FAVORITE_SHELF_HOST}/bookshelf`;
   const response = await fetch(url, {
     headers: {
       ...REQUEST_HEADERS,
