@@ -2,7 +2,7 @@
   "name": "breeze-plugin-jjmhw",
   "version": "0.3.2",
   "type": "module",
-  "packageManager": "pnpm@12.5.0",
+  "packageManager": "pnpm@12.14.0",
   "files": [
     "dist"
   ],
