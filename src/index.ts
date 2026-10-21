@@ -17,6 +17,8 @@ import type {
   SearchComicPayload,
   SearchResultContract,
   SettingsBundleContract,
+  PluginCloudFavoritePagesBundleContract,
+  PluginHomePagesBundleContract,
   CapabilitiesBundleContract,
   FavoriteWorkflowContinuePayload,
   FavoriteWorkflowResult,
@@ -63,7 +65,12 @@ import {
   parseSearchResult,
   type ParsedChapterPage,
 } from "./parser";
-import { buildPluginInfo } from "./get-info";
+import {
+  buildCategoryScene,
+  buildCloudFavoriteScene,
+  buildPluginInfo,
+  buildRankingScene,
+} from "./get-info";
 
 function requireValue(value: unknown, name: string): string {
   const result = readString(value);
@@ -741,15 +748,47 @@ async function getLoginBundle(): Promise<LoginBundleContract> {
   });
 }
 
-async function init(): Promise<void> {
-  // 无验证码：有账密就自动登录一次拿会话，失败不阻断公开浏览。
+async function loginForInit(): Promise<void> {
   const { account, password } = await loadAuthCredentials();
   if (!account || !password) return;
-  try {
-    await loginToSite({ account, password });
-  } catch {
-    // 忽略：各接口会返回明确的业务错误，宿主引导用户去登录页。
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await loginToSite({ account, password });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error(`登录失败，已重试 3 次: ${String(lastError)}`);
+}
+
+async function getPluginHomePagesBundle(): Promise<PluginHomePagesBundleContract> {
+  return {
+    source: PLUGIN_ID,
+    scheme: { version: "1.0.0" as const, type: "homePagesBundle" as const },
+    data: {
+      tabs: [
+        { id: "ranking", title: "排行榜", scene: buildRankingScene() },
+        { id: "category", title: "分类", scene: buildCategoryScene() },
+      ],
+    },
+  };
+}
+
+async function getPluginCloudFavoritePagesBundle(): Promise<PluginCloudFavoritePagesBundleContract> {
+  return {
+    source: PLUGIN_ID,
+    scheme: { version: "1.0.0" as const, type: "cloudFavoritePagesBundle" as const },
+    data: {
+      tabs: [{ id: "cloudFavorite", title: "云端收藏", scene: buildCloudFavoriteScene() }],
+    },
+  };
+}
+
+async function init(): Promise<{ source: string; data: Record<string, unknown> }> {
+  await loginForInit();
+  return { source: PLUGIN_ID, data: { ok: true, started: true } };
 }
 
 export default {
@@ -761,7 +800,8 @@ export default {
   getComicListSceneBundle,
   getCloudFavoriteData,
   getCloudFavoriteFilterBundle,
-  getCloudFavoriteSceneBundle,
+  getPluginHomePagesBundle,
+  getPluginCloudFavoritePagesBundle,
   getRankingData,
   getRankingFilterBundle,
   getCategoryData,

@@ -171,8 +171,8 @@ importers:
   .:
     dependencies:
       breeze-plugin-kit:
-        specifier: ^0.15.0
-        version: 0.15.0
+        specifier: ^0.18.0
+        version: 0.18.0
     devDependencies:
       '@rspack/cli':
         specifier: ^2.1.8
@@ -975,8 +975,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  breeze-plugin-kit@0.15.0:
-    resolution: {integrity: sha512-nimiEQaltwQXhzJG5vN4QfKXz3l9Csw+JodKJQH2cBkTqUBJ29bF/CrFxU2K/QW31xKM2IY8Gx+sLNr2SUIi7g==}
+  breeze-plugin-kit@0.18.0:
+    resolution: {integrity: sha512-8ePR2iYZcv7Rf/VHx9HEFWM/PkLYY5+7P6aRZKFh1I/uQv0dviPM0yqjWqzotPRRUvIS1UcnXY8NRvh+3zgVxg==}
 
   cross-env@10.1.0:
     resolution: {integrity: sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==}
@@ -1485,7 +1485,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  breeze-plugin-kit@0.15.0: {}
+  breeze-plugin-kit@0.18.0: {}
 
   cross-env@10.1.0:
     dependencies:
